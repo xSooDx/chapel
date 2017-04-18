@@ -592,10 +592,10 @@ proc _TimMergeRuns(Data:[?adom],runs:[?rdom] ?domtype, lo=rdom.low, hi=rdom.high
   }
   var dom1,dom2: domtype;
   var m = (lo+hi)/2;
-  //cobegin with (ref dom1, ref dom2){
+  cobegin with (ref dom1, ref dom2){
     dom1=_TimMergeRuns(Data,runs,lo,m, comparator=comparator);
     dom2=_TimMergeRuns(Data,runs,m+1,hi, comparator=comparator);
-  //}
+  }
   return _TimSortMerge(Data,dom1,dom2, comparator=comparator);
 
 }
