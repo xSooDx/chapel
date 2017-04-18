@@ -564,7 +564,7 @@ proc binaryInsertionSort(Data: [?Dom] ?eltType, comparator:?rec=defaultComparato
 proc timSort(Data: [?Dom] ?eltType, comparator:?rec=defaultComparator) {
   use Search; 
   chpl_check_comparator(comparator, eltType);
-  if(Dom.size<=64){
+  if(Dom.size<=4){
     binaryInsertionSort(Data,comparator=comparator);
     return;
   }
@@ -573,37 +573,9 @@ proc timSort(Data: [?Dom] ?eltType, comparator:?rec=defaultComparator) {
         stride = abs(Dom.stride);
   
 
-  var (runs,count)=getRuns(Data,getMinrun(Dom.size)); 
-  //reusing runs array for stack
-  var top = 1; //array stack. Add first 3 runs
-  var next = 2;//not part of the stack. next run to be added
-  while(top>0){
-    if(top<2){
-      if(next>=count){
-        _TimSortMerge(Data,runs[0],runs[1]);
-        top-=1;
-      }else{
-        top+=1;
-        runs[top]=runs[next];
-        next+=1;
-      }
-    }else{
-      if(runs[top].size> runs[top-1].size+runs[top-2].size && runs[top-1].size>runs[top-2].size){
-        top+=1;
-        runs[top]=runs[next];
-        next+=1;
-      }else{
-        if(runs[top].size<runs[top-2].size){
-          top-=1;
-          runs[top]=_TimSortMerge(Data,runs[top],runs[top+1]);
-        }else{
-          top-=1;
-          runs[top-1]=_TimSortMerge(Data,runs[top-1],runs[top]);
-          runs[top]=runs[top+1];
-        }
-      }
-    }
-  }
+  var (runs,count)=getRuns(Data,getMinrun(Dom.size));
+  var res=runs[0];
+  _TimMergeRuns(Data,runs,hi=count-1,comparator=comparator); 
   
 }
 
@@ -614,6 +586,20 @@ proc timSort(Data: [?Dom] ?eltType, comparator:?rec=defaultComparator)
     compilerError("timSort() requires 1-D array");
 }
 
+proc _TimMergeRuns(Data:[?adom],runs:[?rdom] ?domtype, lo=rdom.low, hi=rdom.high, comparator:?rec=defaultComparator):domtype{
+  if(lo==hi){
+    return runs[lo];
+  }
+  var dom1,dom2: domtype;
+  var m = (lo+hi)/2;
+  //cobegin with (ref dom1, ref dom2){
+    dom1=_TimMergeRuns(Data,runs,lo,m, comparator=comparator);
+    dom2=_TimMergeRuns(Data,runs,m+1,hi, comparator=comparator);
+  //}
+  return _TimSortMerge(Data,dom1,dom2, comparator=comparator);
+
+}
+ 
 /*
   Calculates the minrun length.
   
@@ -698,6 +684,16 @@ proc getRuns(Data:[?Dom] ?eltType, minrun:int=1, comparator:?rec=defaultComparat
   }while(base<high);  
   return (runs,n);   
 }
+/*
+   Merges 2 consecutive runs for timSort  
+   
+   :arg Data: The array to be scanned
+   :type Data: [] `eltType`
+   :arg run1: domain of first run
+   :arg run2: domain of second run 
+   :arg comparator: :ref:`Comparator <comparators>` record that defines how the
+      data is sorted.
+*/
 proc _TimSortMerge(Data:[?Dom] ?eltType,run1:domain,run2:domain,comparator:?rec=defaultComparator) {
   const stride=Dom.stride;
   var s1,s2:int;
@@ -775,6 +771,7 @@ proc _TimSortMerge(Data:[?Dom] ?eltType,run1:domain,run2:domain,comparator:?rec=
           }
           if(d>stride){
             d>>=1;
+            d-=stride;            
             Data[k-d..k by stride] = tmp[i-d..i by stride];
             i-=d;
             k-=d;
@@ -796,9 +793,7 @@ proc _TimSortMerge(Data:[?Dom] ?eltType,run1:domain,run2:domain,comparator:?rec=
           if(d>stride){
              
             d>>=1;
-            d-=stride;
-            //d-=stride;
-            
+            d-=stride;            
             for (x,y) in zip(k-d..k by -stride,j-d..j by -stride){
               Data[x]=Data[y];
             }
